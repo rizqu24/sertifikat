@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generator Sertifikat KKG</title>
+    <!-- Tailwind CSS untuk Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS untuk membaca dan membuat Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- jsPDF untuk membuat PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; }
+        .canvas-container {
+            width: 100%;
+            overflow: hidden;
+            border-radius: 0.5rem;
+            border: 2px dashed #cbd5e1;
+            background-color: #fff;
+        }
+        /* Canvas internal resolution is high, but displayed responsively */
+        canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- Header -->
+        <div class="bg-blue-600 text-white rounded-xl p-6 mb-6 shadow-lg flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+                    <i data-lucide="award"></i> Generator Sertifikat Otomatis
+                </h1>
+                <p class="text-blue-100 mt-2">Buat sertifikat massal dari data Excel menjadi file PDF.</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Panel Kiri: Kontrol & Input -->
+            <div class="lg:col-span-1 space-y-6">
+                
+                <!-- Langkah 1: Template Excel -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold mb-3 flex items-center gap-2 border-b pb-2">
+                        <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-sm">1</span> 
+                        Format Data
+                    </h2>
+                    <p class="text-sm text-gray-600 mb-4">Unduh format Excel ini, isi datanya, lalu simpan.</p>
+                    <button onclick="downloadExcelTemplate()" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition">
+                        <i data-lucide="file-spreadsheet" class="w-5 h-5"></i> Unduh Template Excel
+                    </button>
+                </div>
+
+                <!-- Langkah 2: Unggah Background -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold mb-3 flex items-center gap-2 border-b pb-2">
+                        <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-sm">2</span> 
+                        Desain Sertifikat (Kosong)
+                    </h2>
+                    <p class="text-sm text-gray-600 mb-2">
+                        Sistem otomatis mencari file <b>template.png</b> (atau .jpg) di folder yang sama.
+                    </p>
+                    <p class="text-xs text-gray-500 mb-4">Atau unggah manual jika ingin menggantinya sementara:</p>
+                    <input type="file" id="bgUpload" accept="image/png, image/jpeg" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border rounded-md" onchange="handleBgUpload(event)">
+                    <div id="templateStatus" class="mt-3 text-xs font-semibold text-blue-600">Memeriksa template lokal...</div>
+                </div>
+
+                <!-- Langkah 3: Unggah Data Excel -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold mb-3 flex items-center gap-2 border-b pb-2">
+                        <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-sm">3</span> 
+                        Unggah Data Peserta
+                    </h2>
+                    <p class="text-sm text-gray-600 mb-4">Unggah file Excel yang sudah Anda isi.</p>
+                    <input type="file" id="excelUpload" accept=".xlsx, .xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer border rounded-md" onchange="handleExcelUpload(event)">
+                    
+                    <div id="dataStatus" class="mt-3 text-sm text-gray-500 hidden">
+                        <span id="dataCount" class="font-bold text-green-600">0</span> baris data ditemukan.
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Panel Kanan: Pratinjau & Pengaturan Posisi -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold mb-4 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="bg-blue-100 text-blue-600 w-6 h-6 rounded-full flex items-center justify-center text-sm">4</span> 
+                            Pratinjau & Sesuaikan Posisi
+                        </div>
+                    </h2>
+                    
+                    <!-- Pengaturan Slider -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 bg-gray-50 p-4 rounded-lg border">
+                        <!-- Nama -->
+                        <div class="space-y-2">
+                            <label class="text-sm font-semibold flex justify-between">Posisi NAMA <span id="valNameY" class="text-blue-600">650</span></label>
+                            <input type="range" id="nameY" min="100" max="1200" value="650" class="w-full accent-blue-600" oninput="updateConfig()">
+                            <div class="flex items-center justify-between text-xs text-gray-500">
+                                <span>Ukuran Font:</span>
+                                <input type="number" id="nameSize" value="48" class="w-16 border rounded p-1 text-center" onchange="updateConfig()">
+                            </div>
+                        </div>
+                        <!-- Sekolah -->
+                        <div class="space-y-2">
+                            <label class="text-sm font-semibold flex justify-between">Posisi SEKOLAH <span id="valSchoolY" class="text-blue-600">710</span></label>
+                            <input type="range" id="schoolY" min="100" max="1200" value="710" class="w-full accent-blue-600" oninput="updateConfig()">
+                            <div class="flex items-center justify-between text-xs text-gray-500">
+                                <span>Ukuran Font:</span>
+                                <input type="number" id="schoolSize" value="32" class="w-16 border rounded p-1 text-center" onchange="updateConfig()">
+                            </div>
+                        </div>
+                        <!-- Kecamatan -->
+                        <div class="space-y-2">
+                            <label class="text-sm font-semibold flex justify-between">Posisi KECAMATAN <span id="valKecY" class="text-blue-600">760</span></label>
+                            <input type="range" id="kecY" min="100" max="1200" value="760" class="w-full accent-blue-600" oninput="updateConfig()">
+                            <div class="flex items-center justify-between text-xs text-gray-500">
+                                <span>Ukuran Font:</span>
+                                <input type="number" id="kecSize" value="32" class="w-16 border rounded p-1 text-center" onchange="updateConfig()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Canvas Pratinjau -->
+                    <div class="canvas-container relative shadow-inner">
+                        <canvas id="previewCanvas"></canvas>
+                        <div id="noBgMessage" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50">
+                            <i data-lucide="image" class="w-12 h-12 mb-2"></i>
+                            <p>Silakan unggah gambar sertifikat di Langkah 2</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Langkah 5: Generate -->
+                <div class="bg-blue-50 p-6 rounded-xl border border-blue-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div>
+                        <h3 class="font-bold text-blue-900">Siap mencetak sertifikat?</h3>
+                        <p class="text-sm text-blue-700">Pastikan posisi tulisan di pratinjau sudah pas.</p>
+                    </div>
+                    <button id="btnGenerate" onclick="generatePDF()" disabled class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl shadow-md flex items-center gap-2 transition w-full sm:w-auto justify-center">
+                        <i data-lucide="file-down"></i> Generate & Unduh PDF
+                    </button>
+                </div>
+                
+                <div id="loadingIndicator" class="hidden text-center p-4">
+                    <i data-lucide="loader-2" class="w-8 h-8 animate-spin mx-auto text-blue-600 mb-2"></i>
+                    <p class="font-semibold text-gray-700" id="loadingText">Memproses PDF... (Mungkin memakan waktu untuk data yang banyak)</p>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Inisialisasi Icons
+        lucide.createIcons();
+
+        // Variabel Global
+        let bgImage = null;
+        let excelData = [];
+        const canvas = document.getElementById('previewCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Resolusi Internal Canvas (Standar kualitas tinggi, rasio 3:2 memanjang)
+        // Resolusi ini tidak mempengaruhi seberapa besar canvas tampil di layar, hanya kualitas isinya.
+        const CANVAS_WIDTH = 2000;
+        const CANVAS_HEIGHT = 1414;
+        
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+
+        // Konfigurasi Posisi dan Ukuran Font
+        let config = {
+            nameY: 650, nameSize: 48,
+            schoolY: 710, schoolSize: 32,
+            kecY: 760, kecSize: 32
+        };
+
+        // Coba muat template lokal otomatis saat halaman dibuka
+        window.addEventListener('DOMContentLoaded', () => {
+            const img = new Image();
+            const statusText = document.getElementById('templateStatus');
+            
+            img.onload = function() {
+                bgImage = img;
+                document.getElementById('noBgMessage').style.display = 'none';
+                if(statusText) statusText.innerHTML = '<span class="text-green-600">✓ Template lokal berhasil dimuat!</span>';
+                drawPreview();
+                checkGenerateReady();
+            };
+            
+            img.onerror = function() {
+                // Jika template.png gagal, coba cari template.jpg
+                if (img.src.endsWith('template.png')) {
+                    img.src = 'template.jpg';
+                } else {
+                    if(statusText) statusText.innerHTML = '<span class="text-orange-500">⚠ template.png tidak ditemukan di folder. Silakan unggah manual.</span>';
+                }
+            };
+            
+            // Prioritaskan mencari file PNG terlebih dahulu
+            img.src = 'template.png'; 
+        });
+
+        // Fungsi: Unduh Template Excel
+        function downloadExcelTemplate() {
+            const ws_data = [
+                ["Nama", "Sekolah", "Kecamatan"],
+                ["IAN DIANA ISKANDAR, M.PD.", "SDN 1 CIJEUNGJING", "KECAMATAN CIJEUNGJING"],
+                ["BUDI SANTOSO, S.PD.", "SDN 2 CIJEUNGJING", "KECAMATAN CIJEUNGJING"]
+            ];
+            const ws = XLSX.utils.aoa_to_sheet(ws_data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Data_Peserta");
+            XLSX.writeFile(wb, "Template_Data_Sertifikat.xlsx");
+        }
+
+        // Fungsi: Baca Unggahan Gambar Background
+        function handleBgUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    bgImage = img;
+                    document.getElementById('noBgMessage').style.display = 'none';
+                    drawPreview();
+                    checkGenerateReady();
+                }
+                img.src = e.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        // Fungsi: Baca Unggahan Excel
+        function handleExcelUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                
+                // Ambil sheet pertama
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                
+                // Convert ke JSON
+                const json = XLSX.utils.sheet_to_json(worksheet);
+                
+                // Validasi data (pastikan ada kolom Nama, Sekolah, Kecamatan)
+                let validData = [];
+                json.forEach(row => {
+                    // Cek properti dengan toleransi huruf besar/kecil (case-insensitive)
+                    let nama = row["Nama"] || row["NAMA"] || row["nama"] || "";
+                    let sekolah = row["Sekolah"] || row["SEKOLAH"] || row["sekolah"] || "";
+                    let kecamatan = row["Kecamatan"] || row["KECAMATAN"] || row["kecamatan"] || "";
+                    
+                    if(nama) {
+                        validData.push({ Nama: nama, Sekolah: sekolah, Kecamatan: kecamatan });
+                    }
+                });
+
+                excelData = validData;
+                
+                // Update UI
+                const statusDiv = document.getElementById('dataStatus');
+                statusDiv.classList.remove('hidden');
+                document.getElementById('dataCount').innerText = excelData.length;
+                
+                drawPreview(); // Gambar ulang dengan data pertama jika ada
+                checkGenerateReady();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Fungsi: Update Konfigurasi dari Slider
+        function updateConfig() {
+            config.nameY = parseInt(document.getElementById('nameY').value);
+            config.nameSize = parseInt(document.getElementById('nameSize').value);
+            
+            config.schoolY = parseInt(document.getElementById('schoolY').value);
+            config.schoolSize = parseInt(document.getElementById('schoolSize').value);
+            
+            config.kecY = parseInt(document.getElementById('kecY').value);
+            config.kecSize = parseInt(document.getElementById('kecSize').value);
+
+            // Update Label text
+            document.getElementById('valNameY').innerText = config.nameY;
+            document.getElementById('valSchoolY').innerText = config.schoolY;
+            document.getElementById('valKecY').innerText = config.kecY;
+
+            drawPreview();
+        }
+
+        // Fungsi: Menggambar di Canvas
+        function drawPreview() {
+            if (!bgImage) return;
+
+            // Bersihkan canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Gambar Background
+            ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+
+            // Setting Text Default
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = "#000000";
+
+            // Ambil data contoh (data pertama dari excel, atau dummy text)
+            let sampleName = "IAN DIANA ISKANDAR, M.PD.";
+            let sampleSchool = "SDN 1 CIJEUNGJING";
+            let sampleKec = "KECAMATAN CIJEUNGJING";
+
+            if (excelData.length > 0) {
+                sampleName = excelData[0].Nama || sampleName;
+                sampleSchool = excelData[0].Sekolah || sampleSchool;
+                sampleKec = excelData[0].Kecamatan || sampleKec;
+            }
+
+            const centerX = canvas.width / 2;
+
+            // Tulis Nama
+            ctx.font = `bold ${config.nameSize}px Arial, sans-serif`;
+            ctx.fillText(sampleName, centerX, config.nameY);
+
+            // Tulis Sekolah
+            ctx.font = `bold ${config.schoolSize}px Arial, sans-serif`;
+            ctx.fillText(sampleSchool, centerX, config.schoolY);
+
+            // Tulis Kecamatan
+            ctx.font = `bold ${config.kecSize}px Arial, sans-serif`;
+            ctx.fillText(sampleKec, centerX, config.kecY);
+        }
+
+        // Fungsi: Cek apakah tombol generate bisa di klik
+        function checkGenerateReady() {
+            const btn = document.getElementById('btnGenerate');
+            if (bgImage && excelData.length > 0) {
+                btn.disabled = false;
+            } else {
+                btn.disabled = true;
+            }
+        }
+
+        // Fungsi Utama: Buat PDF Multi-halaman
+        async function generatePDF() {
+            if (!bgImage || excelData.length === 0) {
+                alert("Mohon unggah gambar background dan data excel terlebih dahulu.");
+                return;
+            }
+
+            // --- TAMBAHAN BARU: Cek keamanan browser (Tainted Canvas) ---
+            try {
+                // Tes apakah browser mengizinkan export gambar dari canvas
+                canvas.toDataURL('image/jpeg', 0.1);
+            } catch (e) {
+                alert("Sistem browser memblokir penyimpanan background karena Anda memuat file lokal. \n\nSOLUSI: Silakan klik tombol 'Choose File' pada Langkah 2 untuk MENGUNGGAH ULANG gambar template secara manual, lalu coba klik Generate lagi.");
+                return;
+            }
+
+            const btn = document.getElementById('btnGenerate');
+            const loader = document.getElementById('loadingIndicator');
+            const loadingText = document.getElementById('loadingText');
+            
+            btn.classList.add('hidden');
+            loader.classList.remove('hidden');
+
+            // Timeout kecil agar UI sempat update memunculkan loader sebelum proses berat dimulai
+            setTimeout(async () => {
+                try {
+                    const { jsPDF } = window.jspdf;
+                    
+                    // Set PDF format landscape berdasarkan rasio canvas kita
+                    const doc = new jsPDF({
+                        orientation: "landscape",
+                        unit: "px",
+                        format: [canvas.width, canvas.height]
+                    });
+
+                    const centerX = canvas.width / 2;
+
+                    for (let i = 0; i < excelData.length; i++) {
+                        loadingText.innerText = `Memproses sertifikat ${i+1} dari ${excelData.length}...`;
+                        
+                        if (i > 0) {
+                            doc.addPage();
+                        }
+
+                        const row = excelData[i];
+
+                        // --- METODE BARU: Gambar semua ke Canvas dulu (100% Akurat dengan Pratinjau) ---
+                        // Bersihkan canvas
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        // Gambar Background
+                        ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+                        
+                        // Setting Teks
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
+                        ctx.fillStyle = "#000000";
+
+                        // Tulis Nama
+                        if(row.Nama) {
+                            ctx.font = `bold ${config.nameSize}px Arial, sans-serif`;
+                            ctx.fillText(row.Nama.toString().toUpperCase(), centerX, config.nameY);
+                        }
+                        // Tulis Sekolah
+                        if(row.Sekolah) {
+                            ctx.font = `bold ${config.schoolSize}px Arial, sans-serif`;
+                            ctx.fillText(row.Sekolah.toString().toUpperCase(), centerX, config.schoolY);
+                        }
+                        // Tulis Kecamatan
+                        if(row.Kecamatan) {
+                            ctx.font = `bold ${config.kecSize}px Arial, sans-serif`;
+                            ctx.fillText(row.Kecamatan.toString().toUpperCase(), centerX, config.kecY);
+                        }
+
+                        // Jadikan canvas sebagai 1 gambar utuh (Screenshot kualitas tinggi 85%)
+                        const finalImageBase64 = canvas.toDataURL('image/jpeg', 0.85);
+                        
+                        // Masukkan gambar utuh tersebut ke dalam PDF
+                        doc.addImage(finalImageBase64, 'JPEG', 0, 0, canvas.width, canvas.height);
+                    }
+
+                    loadingText.innerText = "Menyiapkan file unduhan...";
+                    
+                    // Unduh PDF
+                    doc.save("Sertifikat_Peserta_Batch.pdf");
+                    
+                    // Kembalikan pratinjau seperti semula
+                    drawPreview();
+
+                } catch (error) {
+                    console.error("Error generating PDF:", error);
+                    alert("Terjadi kesalahan saat membuat PDF. Pastikan format gambar dan excel benar.");
+                } finally {
+                    // Kembalikan UI
+                    loader.classList.add('hidden');
+                    btn.classList.remove('hidden');
+                }
+            }, 100);
+        }
+    </script>
+</body>
+</html>
